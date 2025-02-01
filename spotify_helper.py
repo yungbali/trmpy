@@ -5,8 +5,11 @@ from dotenv import load_dotenv
 import time
 from typing import Dict, List, Optional
 import socket
+import requests
 
 load_dotenv()
+
+LASTFM_API_KEY = os.getenv('LASTFM_API_KEY')
 
 class SpotifyAnalyzer:
     def __init__(self):
@@ -412,9 +415,26 @@ class SpotifyAnalyzer:
             
         return avg_features 
 
+    def get_lastfm_data(self, artist_name: str) -> Optional[Dict]:
+        """Get Last.fm artist data including similar artists and tags"""
+        try:
+            url = f"http://ws.audioscrobbler.com/2.0/?method=artist.getinfo&artist={artist_name}&api_key={LASTFM_API_KEY}&format=json"
+            response = requests.get(url)
+            data = response.json()
+            
+            return {
+                'similar': [a['name'] for a in data.get('artist', {}).get('similar', {}).get('artist', [])[:5]],
+                'tags': [t['name'] for t in data.get('artist', {}).get('tags', {}).get('tag', [])],
+                'bio': data.get('artist', {}).get('bio', {}).get('summary', '')
+            }
+        except Exception as e:
+            print(f"Last.fm API error: {e}")
+            return None
+
     def generate_ar_report(self, artist_data) -> Optional[str]:
         """Generate A&R report prompt from artist data"""
         try:
+            lastfm_data = self.get_lastfm_data(artist_data['profile']['name'])
             prompt = f"""As an AI-powered A&R specialist, analyze this artist's potential:
             
 Artist: {artist_data['profile']['name']}
@@ -422,6 +442,12 @@ Genres: {', '.join(artist_data['profile']['genres'])}
 Popularity: {artist_data['profile']['popularity']}/100
 Followers: {artist_data['profile']['followers']}
 
+-- Last.fm Data --
+Similar Artists: {', '.join(lastfm_data['similar']) if lastfm_data and lastfm_data.get('similar') else 'N/A'}
+Top Tags: {', '.join(lastfm_data['tags']) if lastfm_data and lastfm_data.get('tags') else 'N/A'}
+Bio Summary: {lastfm_data['bio'][:300] + '...' if lastfm_data and lastfm_data.get('bio') else 'N/A'}
+
+Spotify Analysis:
 Top Tracks: {', '.join(track['name'] for track in artist_data['top_tracks']) if artist_data.get('top_tracks') else 'No top tracks available'}
 Similar Artists: {', '.join(artist['name'] for artist in artist_data['related_artists']) if artist_data.get('related_artists') else 'No similar artists available'}
 

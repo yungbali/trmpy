@@ -7,10 +7,33 @@ import os
 def display_ar_report(artist_data):
     """Display AI-generated A&R report"""
     try:
-        # Ensure the SpotifyAnalyzer instance is created
         spotify = SpotifyAnalyzer()
+        lastfm_data = spotify.get_lastfm_data(artist_data['profile']['name'])
         
-        # Generate the A&R report prompt
+        # Display Last.fm insights in sidebar
+        with st.sidebar:
+            st.subheader("🎵 Last.fm Insights")
+            
+            if lastfm_data:
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.write("**Similar Artists**")
+                    for artist in lastfm_data.get('similar', [])[:3]:
+                        st.caption(f"- {artist}")
+                
+                with col2:
+                    st.write("**Top Tags**")
+                    for tag in lastfm_data.get('tags', [])[:3]:
+                        st.caption(f"#{tag.lower()}")
+                
+                if lastfm_data.get('bio'):
+                    st.divider()
+                    st.write("**Bio Summary**")
+                    st.caption(lastfm_data['bio'][:250] + "...")
+            else:
+                st.warning("No Last.fm data available")
+
+        # Generate and display report (existing code)
         prompt = spotify.generate_ar_report(artist_data)
         
         if prompt:
@@ -26,21 +49,32 @@ def display_ar_report(artist_data):
             
             report = response.choices[0].message.content
             
-            # Display the report in a structured way
+            # Enhanced report display with Last.fm data
             st.subheader("🎯 A&R Analysis Report")
+            
+            # Add data summary tiles
+            cols = st.columns(3)
+            if lastfm_data:
+                cols[0].metric("Community Tags", ", ".join(lastfm_data.get('tags', [])[:3]))
+                cols[1].metric("Crowd Similar Artists", len(lastfm_data.get('similar', [])))
+                cols[2].metric("Bio Length", f"{len(lastfm_data.get('bio', ''))} chars")
+            
+            # Display full analysis
             st.markdown(report)
             
-            # Add download button for the report
+            # Update download data with Last.fm info
             st.download_button(
-                label="Download A&R Report",
-                data=f"""A&R Report for {artist_data['profile']['name']}\n
-                Generated on {datetime.now().strftime('%Y-%m-%d')}\n\n
+                label="Download Full Report",
+                data=f"""A&R Report for {artist_data['profile']['name']}
+                Last.fm Insights:
+                - Similar Artists: {', '.join(lastfm_data.get('similar', [])) if lastfm_data else 'N/A'}
+                - Top Tags: {', '.join(lastfm_data.get('tags', [])) if lastfm_data else 'N/A'}
+                - Bio Summary: {lastfm_data.get('bio', 'N/A')[:500] if lastfm_data else 'N/A'}
+                
                 {report}""",
                 file_name=f"ar_report_{artist_data['profile']['name'].lower().replace(' ', '_')}.txt",
                 mime="text/plain"
             )
-        else:
-            st.error("Failed to generate A&R report prompt.")
             
     except Exception as e:
         st.error(f"Error generating A&R report: {str(e)}")
